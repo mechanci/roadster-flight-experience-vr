@@ -2,7 +2,7 @@ import * as THREE from 'three';
 
 // Cold-gas plumes: soft white puffs that fade and grow. One draw call, fixed particle pool.
 
-const N = 260;
+const N = 700;
 
 export class Vapor {
   constructor(scene) {
@@ -42,7 +42,7 @@ export class Vapor {
         varying float vAge; uniform sampler2D uMap;
         void main(){
           if (vAge >= 1.0) discard;
-          float a = texture2D(uMap, gl_PointCoord).a * (1.0 - vAge) * 0.5;
+          float a = texture2D(uMap, gl_PointCoord).a * (1.0 - vAge) * 0.62;
           gl_FragColor = vec4(0.92, 0.94, 1.0, a);
         }`,
     });
@@ -52,17 +52,17 @@ export class Vapor {
     scene.add(this.points);
   }
 
-  emit(origin, dir, speed, carVel, size) {
+  emit(origin, dir, speed, carVel, size, spread = 3) {
     const i = this.next; this.next = (this.next + 1) % N;
     const r = () => (Math.random() - 0.5);
     this.pos.set([origin.x + r() * 0.15, origin.y + r() * 0.15, origin.z + r() * 0.15], i * 3);
     this.vel.set([
-      carVel.x * 0.35 + dir.x * speed + r() * 3,
-      carVel.y * 0.35 + dir.y * speed + r() * 3,
-      carVel.z * 0.35 + dir.z * speed + r() * 3,
+      carVel.x * 0.35 + dir.x * speed + r() * spread,
+      carVel.y * 0.35 + dir.y * speed + r() * spread,
+      carVel.z * 0.35 + dir.z * speed + r() * spread,
     ], i * 3);
     this.age[i] = 0;
-    this.life[i] = 0.6 + Math.random() * 0.6;
+    this.life[i] = 0.9 + Math.random() * 0.8;
     this.size[i] = size * (0.7 + Math.random() * 0.6);
   }
 
@@ -75,7 +75,7 @@ export class Vapor {
       this.pos[i * 3] += this.vel[i * 3] * dt;
       this.pos[i * 3 + 1] += this.vel[i * 3 + 1] * dt;
       this.pos[i * 3 + 2] += this.vel[i * 3 + 2] * dt;
-      this.size[i] += dt * 1.6;
+      this.size[i] += dt * 3.2;
     }
     this.geo.attributes.position.needsUpdate = true;
     this.geo.attributes.aAge.needsUpdate = true;

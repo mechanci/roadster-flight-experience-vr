@@ -67,11 +67,11 @@ export class UI {
       g.fillText('Concept ride-along inspired by the Tesla Roadster thruster demo (Oct 2026)', 60, 130);
 
       g.fillStyle = '#8f9aa5'; g.font = 'bold 22px sans-serif'; g.fillText('CHOOSE YOUR FLIGHT', 60, 190);
-      button('ride:drop', 60, 205, 510, 110, RIDES.drop.label, 'Drive off the edge. Thrusters brake the fall.', this.sel.ride === 'drop');
-      button('ride:hop', 582, 205, 510, 110, RIDES.hop.label, 'Thrusters launch the car over a row of cars.', this.sel.ride === 'hop');
+      button('ride:drop', 60, 205, 510, 110, RIDES.drop.label, RIDES.drop.blurb, this.sel.ride === 'drop');
+      button('ride:hop', 582, 205, 510, 110, RIDES.hop.label, RIDES.hop.blurb, this.sel.ride === 'hop');
 
       g.fillStyle = '#8f9aa5'; g.font = 'bold 22px sans-serif'; g.textAlign = 'left'; g.fillText('COMFORT', 60, 360);
-      const sub = { gentle: 'least rotation', standard: 'moderate', intense: this.sel.ride === 'hop' ? 'full flip' : 'strongest' };
+      const sub = { gentle: 'least rotation', standard: 'moderate', intense: 'full rotation as shown' };
       Object.keys(MODES).forEach((k, i) => button('mode:' + k, 60 + i * 354, 375, 330, 90, MODES[k].label, sub[k], this.sel.mode === k));
 
       button('start', 296, 495, 560, 100, 'START', null, false, true);
@@ -104,7 +104,7 @@ export class UI {
         'Flights last seconds; the air tank (~600 L reported) must be recharged.',
         'No word yet on how thruster maneuvers would be approved for public roads.',
         'Only the top trims carry thrusters; the base car has none.',
-        'About 3 g and a lot of noise: not for every passenger.',
+        'Wall ride relies on fan suction (about 2 g claimed); the drop is about 3 g and loud.',
       ];
       g.font = '26px sans-serif';
       let y = 238;
@@ -173,7 +173,7 @@ export class UI {
       g.font = '34px sans-serif'; g.fillText('g', c.width / 2 + 150, 190);
       // g bar
       g.strokeStyle = 'rgba(127,227,255,0.6)'; g.lineWidth = 3; g.strokeRect(c.width / 2 - 180, 215, 360, 22);
-      g.fillStyle = col; g.fillRect(c.width / 2 - 178, 217, Math.min(1, f / 3.5) * 356, 18);
+      g.fillStyle = col; g.fillRect(c.width / 2 - 178, 217, Math.min(1, Math.max(0, f) / 3.5) * 356, 18);
       g.fillStyle = CYAN; g.font = 'bold 120px sans-serif'; g.fillText(alt.toFixed(0), c.width - 200, 190);
       g.font = '34px sans-serif'; g.fillText('m above ground', c.width - 200, 235);
     }

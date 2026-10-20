@@ -1,5 +1,6 @@
 import * as THREE from 'three';
-import { RAMP_GEOMETRY as RAMP } from './rides.js';
+import { RAMP_GEOMETRY as LOOP, loopProfile, planRow } from './rides.js';
+import { VEHICLES } from './vehicles.js';
 
 // The test site: dusk sky, a long concrete strip, light poles for parallax, distant hills and
 // towers. Ride-specific props (ramp, row of cars, exit sign) are switched by configureForRide().
@@ -86,7 +87,7 @@ export function createWorld(scene) {
   ground.position.y = -0.03;
   root.add(ground);
 
-  const RUNWAY_LEN = 520, RUNWAY_W = 22;
+  const RUNWAY_LEN = 760, RUNWAY_W = 22, RUNWAY_Z = -100;   // z from +280 to -480
   const concTex = canvasTexture(512, 512, (c, w, h) => {
     noise(c, w, h, '#5b5b60', 60, 6000);
     c.strokeStyle = 'rgba(0,0,0,0.25)'; c.lineWidth = 2;
@@ -95,36 +96,36 @@ export function createWorld(scene) {
   }, [RUNWAY_W / 11, RUNWAY_LEN / 11]);
   const runway = new THREE.Mesh(new THREE.PlaneGeometry(RUNWAY_W, RUNWAY_LEN), new THREE.MeshLambertMaterial({ map: concTex }));
   runway.rotation.x = -Math.PI / 2;
-  runway.position.set(0, 0, -RUNWAY_LEN / 2 + 40);
+  runway.position.set(0, 0, RUNWAY_Z);
   root.add(runway);
 
   // centre dashes + edge lines
   {
-    const dashes = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.25, 4), new THREE.MeshBasicMaterial({ color: 0xe9e2c8 }), 130);
+    const dashes = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.25, 4), new THREE.MeshBasicMaterial({ color: 0xe9e2c8 }), 95);
     const m = new THREE.Matrix4();
-    for (let i = 0; i < 130; i++) {
-      m.makeRotationX(-Math.PI / 2).setPosition(0, 0.01, 30 - i * 8);
+    for (let i = 0; i < 95; i++) {
+      m.makeRotationX(-Math.PI / 2).setPosition(0, 0.01, 270 - i * 8);
       dashes.setMatrixAt(i, m);
     }
     root.add(dashes);
     for (const x of [-RUNWAY_W / 2 + 0.6, RUNWAY_W / 2 - 0.6]) {
       const edge = new THREE.Mesh(new THREE.PlaneGeometry(0.3, RUNWAY_LEN), new THREE.MeshBasicMaterial({ color: 0xe9e2c8 }));
       edge.rotation.x = -Math.PI / 2;
-      edge.position.set(x, 0.01, -RUNWAY_LEN / 2 + 40);
+      edge.position.set(x, 0.01, RUNWAY_Z);
       root.add(edge);
     }
   }
 
   // ---- light poles + reflector posts (lots of parallax) ---------------------------------
   {
-    const N = 36;
+    const N = 48;
     const poles = new THREE.InstancedMesh(new THREE.CylinderGeometry(0.1, 0.14, 9, 6), new THREE.MeshLambertMaterial({ color: 0x2b2b30 }), N * 2);
     const heads = new THREE.InstancedMesh(new THREE.BoxGeometry(1.4, 0.25, 0.6), new THREE.MeshBasicMaterial({ color: 0xffe2a8 }), N * 2);
     const m = new THREE.Matrix4();
     let k = 0;
     for (let i = 0; i < N; i++) {
       for (const side of [-1, 1]) {
-        const z = 20 - i * 16, x = side * (RUNWAY_W / 2 + 4);
+        const z = 270 - i * 16, x = side * (RUNWAY_W / 2 + 4);
         m.makeTranslation(x, 4.5, z); poles.setMatrixAt(k, m);
         m.makeTranslation(x - side * 0.6, 9.1, z); heads.setMatrixAt(k, m);
         k++;
@@ -132,11 +133,11 @@ export function createWorld(scene) {
     }
     root.add(poles, heads);
 
-    const posts = new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, 0.7, 0.12), new THREE.MeshBasicMaterial({ color: 0xff7a3a }), 200);
+    const posts = new THREE.InstancedMesh(new THREE.BoxGeometry(0.12, 0.7, 0.12), new THREE.MeshBasicMaterial({ color: 0xff7a3a }), 304);
     k = 0;
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 152; i++) {
       for (const side of [-1, 1]) {
-        m.makeTranslation(side * (RUNWAY_W / 2 + 0.5), 0.35, 30 - i * 5); posts.setMatrixAt(k++, m);
+        m.makeTranslation(side * (RUNWAY_W / 2 + 0.5), 0.35, 272 - i * 5); posts.setMatrixAt(k++, m);
       }
     }
     root.add(posts);
@@ -168,71 +169,77 @@ export function createWorld(scene) {
     });
   }
 
-  // ---- ramp (ride A) --------------------------------------------------------------------
+  // ---- curved ramp (ride A): a half circle swept along the baked centre line -------------------
   const rampGroup = new THREE.Group();
   {
-    const L = RAMP.s1 - RAMP.s0;
-    const shape = new THREE.Shape();
-    shape.moveTo(RAMP.s0, 0);
-    for (let i = 0; i <= 40; i++) {
-      const x = i / 40;
-      shape.lineTo(RAMP.s0 + x * L, RAMP.height * (6 * x ** 5 - 15 * x ** 4 + 10 * x ** 3));
-    }
-    shape.lineTo(RAMP.edge, RAMP.height);
-    shape.lineTo(RAMP.edge, 0);
-    shape.lineTo(RAMP.s0, 0);
-    const width = 9;
-    const geo = new THREE.ExtrudeGeometry(shape, { depth: width, bevelEnabled: false });
-    const steelTex = canvasTexture(256, 256, (c, w, h) => {
-      noise(c, w, h, '#33363e', 40, 3000);
-      c.strokeStyle = 'rgba(255,255,255,0.08)'; c.lineWidth = 2;
-      for (let x = 0; x < w; x += 64) { c.beginPath(); c.moveTo(x, 0); c.lineTo(x, h); c.stroke(); }
+    const prof = loopProfile();
+    const W = LOOP.width / 2, T = 0.6;
+    const idx = [];
+    for (let i = 0; i < prof.n; i += 8) idx.push(i);
+    if (idx[idx.length - 1] !== prof.n - 1) idx.push(prof.n - 1);
+    const pos = [], tri = [];
+    idx.forEach(i => {
+      const sv = prof.s[i], yv = prof.y[i], th = prof.th[i];
+      const sq = sv + Math.sin(th) * T, yq = yv - Math.cos(th) * T;   // outer face, away from the circle centre
+      const z = -(LOOP.s0 + sv), zq = -(LOOP.s0 + sq);
+      pos.push(-W, yv, z, W, yv, z, -W, yq, zq, W, yq, zq);          // surfL, surfR, outL, outR
     });
-    const ramp = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: steelTex, color: 0xb0b4c0 }));
-    // shape x (distance) -> world -z, extrusion depth -> world x
-    ramp.rotation.y = Math.PI / 2;
-    ramp.position.x = -width / 2;
-    rampGroup.add(ramp);
-    // hazard bar at the edge and edge lights
-    const bar = new THREE.Mesh(new THREE.BoxGeometry(width, 0.35, 0.5), new THREE.MeshBasicMaterial({ color: 0xffc23a }));
-    bar.position.set(0, RAMP.height + 0.18, -RAMP.edge + 0.25);
-    rampGroup.add(bar);
-    for (let i = -4; i <= 4; i++) {
-      const l = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 4), new THREE.MeshBasicMaterial({ color: i % 2 ? 0xff3a2a : 0xffffff }));
-      l.position.set(i, RAMP.height + 0.1, -RAMP.edge + 1);
-      rampGroup.add(l);
+    const quad = (a, b, c, d) => tri.push(a, b, c, a, c, d);
+    for (let k = 0; k < idx.length - 1; k++) {
+      const a = k * 4, b = (k + 1) * 4;
+      quad(a, a + 1, b + 1, b);              // running surface
+      quad(a + 2, a + 3, b + 3, b + 2);      // outer face
+      quad(a, a + 2, b + 2, b);              // left wall
+      quad(a + 1, a + 3, b + 3, b + 1);      // right wall
     }
-    // side lights up the slope
-    for (let s = RAMP.s0; s <= RAMP.s1; s += 5) {
-      const x = (s - RAMP.s0) / L;
-      const h = RAMP.height * (6 * x ** 5 - 15 * x ** 4 + 10 * x ** 3);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    geo.setIndex(tri);
+    geo.computeVertexNormals();
+    rampGroup.add(new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ color: 0x4d525e, side: THREE.DoubleSide, flatShading: true })));
+
+    // edge lights along the track and support posts down to the ground
+    const lightGeo = new THREE.BoxGeometry(0.16, 0.16, 0.16);
+    const postMat = new THREE.MeshLambertMaterial({ color: 0x30333b });
+    for (let k = 0; k < idx.length; k += 7) {
+      const i = idx[k];
+      const z = -(LOOP.s0 + prof.s[i]);
       for (const side of [-1, 1]) {
-        const l = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.15, 0.15), new THREE.MeshBasicMaterial({ color: 0x7fd0ff }));
-        l.position.set(side * (width / 2 - 0.2), h + 0.1, -s);
+        const l = new THREE.Mesh(lightGeo, new THREE.MeshBasicMaterial({ color: (k / 7) % 2 ? 0x7fd0ff : 0xffffff }));
+        l.position.set(side * (W - 0.25), prof.y[i], z);
         rampGroup.add(l);
+      }
+    }
+    for (let k = 10; k < idx.length; k += 11) {
+      const i = idx[k], th = prof.th[i];
+      const yq = prof.y[i] - Math.cos(th) * T, zq = -(LOOP.s0 + prof.s[i] + Math.sin(th) * T);
+      if (yq < 1) continue;
+      for (const side of [-1, 1]) {
+        const post = new THREE.Mesh(new THREE.BoxGeometry(0.35, yq, 0.35), postMat);
+        post.position.set(side * (W - 0.2), yq / 2, zq);
+        rampGroup.add(post);
       }
     }
   }
   root.add(rampGroup);
 
-  // ---- row of cars (ride B) -------------------------------------------------------------
+  // ---- row of vehicles (ride B) -------------------------------------------------------------
   const carsGroup = new THREE.Group();
   root.add(carsGroup);
-  const carColors = [0xe8e8ea, 0x15161a, 0xa0242b, 0x9aa0a8, 0x2d4a7a];
-  function parkedCar(color) {
+  const darkMat = new THREE.MeshLambertMaterial({ color: 0x0a0b0d });
+  function vehicle(v) {
     const g = new THREE.Group();
-    const paint = new THREE.MeshLambertMaterial({ color });
-    const dark = new THREE.MeshLambertMaterial({ color: 0x0a0b0d });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.62, 4.8), paint);
-    body.position.y = 0.6;
-    const cabin = new THREE.Mesh(new THREE.BoxGeometry(1.65, 0.5, 2.5), dark);
-    cabin.position.set(0, 1.12, 0.1);
-    const roof = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.06, 1.9), paint);
-    roof.position.set(0, 1.4, 0.1);
-    g.add(body, cabin, roof);
-    for (const [x, z] of [[-0.95, -1.5], [0.95, -1.5], [-0.95, 1.5], [0.95, 1.5]]) {
-      const w = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.25, 12), dark);
-      w.rotation.z = Math.PI / 2; w.position.set(x, 0.36, z);
+    const shape = new THREE.Shape(v.profile.map(([x, y]) => new THREE.Vector2(x, y)));
+    const body = new THREE.Mesh(new THREE.ExtrudeGeometry(shape, { depth: v.width, bevelEnabled: false }),
+      new THREE.MeshLambertMaterial({ color: v.color, flatShading: true }));
+    body.rotation.y = Math.PI / 2;     // profile x (rear to front) -> world -z
+    body.position.x = -v.width / 2;
+    g.add(body);
+    const wheelZ = v.name === 'Semi' ? [1.0, 2.2, 6.0, 7.3] : [v.len * 0.17, v.len * 0.8];
+    for (const z of wheelZ) for (const side of [-1, 1]) {
+      const w = new THREE.Mesh(new THREE.CylinderGeometry(v.name === 'Semi' ? 0.52 : 0.36, v.name === 'Semi' ? 0.52 : 0.36, 0.25, 14), darkMat);
+      w.rotation.z = Math.PI / 2;
+      w.position.set(side * (v.width / 2 - 0.05), v.name === 'Semi' ? 0.52 : 0.36, -z);
       g.add(w);
     }
     return g;
@@ -298,24 +305,20 @@ export function createWorld(scene) {
     rampGroup.visible = ride.kind === 'drop';
     carsGroup.visible = ride.kind === 'hop';
     carsGroup.clear();
+    rampGroup.position.z = 0;
     if (ride.kind === 'hop') {
-      const span = ride.airSpan(2.4);
-      if (span) {
-        const pitch = 6.3;
-        const n = Math.max(2, Math.floor((span[1] - span[0] + 1.5) / pitch));
-        const mid = (span[0] + span[1]) / 2;
-        for (let i = 0; i < n; i++) {
-          const c = parkedCar(carColors[i % carColors.length]);
-          c.position.set(0, 0, -(mid + (i - (n - 1) / 2) * pitch));
-          carsGroup.add(c);
-        }
-      }
+      const plan = planRow(ride, VEHICLES.map(v => ({ len: v.len, h: v.h })));
+      plan.order.forEach((vi, j) => {
+        const c = vehicle(VEHICLES[vi]);
+        c.position.set(0, 0, -plan.starts[j]);
+        carsGroup.add(c);
+      });
     }
-    const end = ride.stats.distance;
-    const touch = ride.sample(ride.events.touch).s;
-    markings.position.set(0, 0, -touch);
-    sign.position.set(0, 0, -(end + 22));
-    town.position.set(0, 0, -(end + 120));
+    const dir = ride.endDirZ, zEnd = -ride.endS;
+    markings.position.set(0, 0, -ride.sample(ride.events.touch).s);
+    sign.position.set(0, 0, zEnd + dir * 22);
+    sign.rotation.y = dir > 0 ? Math.PI : 0;
+    town.position.set(0, 0, zEnd + dir * 120);
   }
 
   return { configureForRide, sun, root };

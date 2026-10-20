@@ -59,6 +59,17 @@ export class Audio {
     this.sub.connect(this.subGain).connect(this.master);
     this.sub.start();
 
+    // suction fans: a hum plus a whoosh
+    this.fanOsc = ctx.createOscillator(); this.fanOsc.type = 'sawtooth'; this.fanOsc.frequency.value = 160;
+    const fanLP = ctx.createBiquadFilter(); fanLP.type = 'lowpass'; fanLP.frequency.value = 700;
+    this.fanGain = ctx.createGain(); this.fanGain.gain.value = 0;
+    this.fanOsc.connect(fanLP).connect(this.fanGain).connect(this.cabin);
+    this.fanOsc.start();
+    const fanNoise = noise();
+    const fanBP = ctx.createBiquadFilter(); fanBP.type = 'bandpass'; fanBP.frequency.value = 1100; fanBP.Q.value = 0.8;
+    this.fanNoiseGain = ctx.createGain(); this.fanNoiseGain.gain.value = 0;
+    fanNoise.connect(fanBP).connect(this.fanNoiseGain).connect(this.cabin);
+
     this.on = true;
   }
 
@@ -75,6 +86,10 @@ export class Audio {
     this.roarGain.gain.setTargetAtTime(thr * 0.55, t, 0.03);
     this.hissGain.gain.setTargetAtTime(thr * 0.22, t, 0.03);
     this.subGain.gain.setTargetAtTime(thr * 0.5, t, 0.04);
+    const fan = active ? (s.fan || 0) : 0;
+    this.fanOsc.frequency.setTargetAtTime(150 + fan * 40, t, 0.2);
+    this.fanGain.gain.setTargetAtTime(fan * 0.05, t, 0.15);
+    this.fanNoiseGain.gain.setTargetAtTime(fan * 0.09, t, 0.15);
     this.cabin.frequency.setTargetAtTime(air ? 1800 : 12000, t, 0.12);
   }
 
@@ -111,6 +126,6 @@ export class Audio {
 
   silence() {
     if (!this.on) return;
-    this.update({ speed: 0, thrust: 0, f: 1 }, false);
+    this.update({ speed: 0, thrust: 0, f: 1, fan: 0 }, false);
   }
 }

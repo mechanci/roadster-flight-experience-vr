@@ -9,21 +9,24 @@ const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
 export class Comfort {
   constructor(camera) {
     this.amount = 0;      // smoothed vignette 0..1
+    this.mist = 0;
     this.shakeSeed = Math.random() * 100;
     this.shake = { x: 0, y: 0, z: 0, rx: 0, rz: 0 };
     this.push = { y: 0, z: 0 };
 
     this.material = new THREE.ShaderMaterial({
       transparent: true, depthTest: false, depthWrite: false, side: THREE.BackSide, fog: false,
-      uniforms: { uInner: { value: 100 }, uOuter: { value: 120 }, uAlpha: { value: 0 } },
+      uniforms: { uInner: { value: 100 }, uOuter: { value: 120 }, uAlpha: { value: 0 }, uMist: { value: 0 } },
       vertexShader: 'varying vec3 vDir; void main(){ vDir = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
       fragmentShader: `
-        varying vec3 vDir; uniform float uInner, uOuter, uAlpha;
+        varying vec3 vDir; uniform float uInner, uOuter, uAlpha, uMist;
         void main(){
           vec3 d = normalize(vDir);
           float ang = degrees(acos(clamp(-d.z, -1.0, 1.0)));   // angle off the view axis
           float a = smoothstep(uInner, uOuter, ang) * uAlpha;
-          gl_FragColor = vec4(0.0, 0.0, 0.01, a);
+          float m = uMist * 0.3 * smoothstep(35.0, 100.0, ang);   // white vapour at the edges while the thrusters fire
+          a = max(a, m);
+          gl_FragColor = vec4(mix(vec3(0.0, 0.0, 0.01), vec3(0.85, 0.9, 1.0), clamp(uMist * 1.2, 0.0, 0.85)), a);
         }`,
     });
     this.mesh = new THREE.Mesh(new THREE.SphereGeometry(0.3, 32, 16), this.material);
@@ -44,7 +47,8 @@ export class Comfort {
       const gTerm = clamp((s.f - 1) / 2.3);
       const rotTerm = clamp((s.rate * 180 / Math.PI) / 160);
       const floatTerm = s.f < 0.2 ? 0.12 : 0; // weightless: a little narrowing keeps it comfortable
-      target = clamp(Math.max(gTerm * 0.95, rotTerm * 0.85, floatTerm)) * mode.vignette;
+      const hangTerm = s.f < -0.3 ? 0.4 : 0;  // hanging in the harness upside-down
+      target = clamp(Math.max(gTerm * 0.95, rotTerm * 0.85, floatTerm, hangTerm)) * mode.vignette;
     }
     const k = target > this.amount ? 14 : 4;       // close fast, open slowly
     this.amount += (target - this.amount) * (1 - Math.exp(-k * dt));
@@ -53,6 +57,9 @@ export class Comfort {
     this.material.uniforms.uInner.value = 105 - v * 83;          // half-angle of the clear area
     this.material.uniforms.uOuter.value = 118 - v * 56;
     this.material.uniforms.uAlpha.value = v > 0.004 ? Math.min(1, 0.15 + v * 1.4) : 0;
+    const mistTarget = active ? s.thrust : 0;
+    this.mist += (mistTarget - this.mist) * (1 - Math.exp(-(mistTarget > this.mist ? 12 : 2.5) * dt));
+    this.material.uniforms.uMist.value = this.mist;
 
     // head sinks into the seat under load, rises when weightless
     const targetY = active ? -0.045 * clamp((s.f - 1) / 2.3) + 0.03 * (s.f < 0.2 ? 1 : 0) : 0;

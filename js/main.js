@@ -88,7 +88,7 @@ const app = {
   prevS: 0, prevY: 0,
   hapticT: 0,
   uiT: 0,
-  emitAcc: 0,
+  emitAcc: 0, jetAcc: 0, splash: false,
 };
 window.__app = app;
 app.finishRide = () => finishRide();
@@ -236,8 +236,21 @@ window.addEventListener('resize', () => {
 // ------------------------------------------------------------------ main loop
 let lastTs = 0, elapsed = 0;
 const tmpV = new THREE.Vector3(), tmpQ = new THREE.Quaternion(), carVel = new THREE.Vector3(), emDir = new THREE.Vector3();
-const EMITTERS = [[-0.8, 0.25, 1.5], [0.8, 0.25, 1.5], [-0.8, 0.25, -1.4], [0.8, 0.25, -1.4]].map(a => new THREE.Vector3(...a));
+const em = (p, d) => ({ p: new THREE.Vector3(...p), d: new THREE.Vector3(...d).normalize() });
+// main thrusters point down out of the underbody; two vents sit by the doors so plumes show at the cabin's sides
+const PLUMES = [em([-0.6, 0.15, 1.4], [0, -1, 0]), em([0.6, 0.15, 1.4], [0, -1, 0]), em([-0.6, 0.15, -1.4], [0, -1, 0]),
+  em([0.6, 0.15, -1.4], [0, -1, 0]), em([-1.0, 0.3, 0.2], [-0.55, -0.85, 0]), em([1.0, 0.3, 0.2], [0.55, -0.85, 0])];
+const JETS = [em([-0.95, 0.5, 1.5], [-0.8, 0.6, 0]), em([0.95, 0.5, 1.5], [0.8, -0.6, 0]),
+  em([-0.95, 0.5, -1.5], [-0.8, -0.6, 0]), em([0.95, 0.5, -1.5], [0.8, 0.6, 0])];
 const IDLE = { s: 0, y: 0, pitch: 0, roll: 0, speed: 0, f: 1, gFwd: 0, thrust: 0, phase: 0, rate: 0 };
+
+// debug: ?cam=x,y,z&look=x,y,z renders from a fixed outside camera (for checking models)
+let dbgCam = null;
+if (params.get('cam')) {
+  dbgCam = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 2000);
+  dbgCam.position.set(...params.get('cam').split(',').map(Number));
+  dbgCam.lookAt(...(params.get('look') || '0,0,0').split(',').map(Number));
+}
 
 refreshPreview();
 ui.show('menu');
@@ -270,8 +283,8 @@ function frame(ts) {
     if (crossed(ev.move)) audio.beep(1320, 0.25, 0.2);
     if (crossed(0.4)) audio.click();
     for (const k of ['launch', 'brake']) if (ev[k] !== undefined && crossed(ev[k])) { audio.thump(1); pulse(1, 120); }
-    if (ev.edge !== undefined && crossed(ev.edge)) audio.thump(0.4);
-    if (crossed(ev.touch)) { audio.thump(0.8); pulse(1, 200); }
+    if (ev.edge !== undefined && crossed(ev.edge)) { audio.thump(0.4); audio.click(); }   // suction lets go
+    if (crossed(ev.touch)) { audio.thump(0.8); pulse(1, 200); app.splash = true; }
     app.prevT = app.rideT;
 
     if (app.rideT >= app.ride.duration && !app.frozen) { finishRide(); }
@@ -284,7 +297,11 @@ function frame(ts) {
 
   // pose
   comfort.update(dt, s, mode, act, time);
-  car.position.set(comfort.shake.x, s.y + 0.5 + comfort.shake.y, -s.s + comfort.shake.z);
+  // on the ramp the car rides the track surface, so it pivots about its wheels; in the air it pivots about its centre of mass
+  const onTrack = s.phase === 9 || s.phase === 10;
+  const pivot = onTrack ? 0 : 0.5;
+  body.position.y = -pivot;
+  car.position.set(comfort.shake.x, s.y + pivot + comfort.shake.y, -s.s + comfort.shake.z);
   car.rotation.set(s.pitch + comfort.shake.rx, 0, s.roll + comfort.shake.rz);
   rig.position.set(EYE.x, EYE.y + comfort.push.y, EYE.z + comfort.push.z);
   cabin.yoke.rotation.z = act ? Math.sin(time * 1.3) * 0.02 + Math.sin(time * 3.1) * 0.006 : 0;
@@ -297,16 +314,37 @@ function frame(ts) {
   const dts = Math.max(dt, 1e-3);
   carVel.set(0, (s.y - app.prevY) / dts, -(s.s - app.prevS) / dts);
   app.prevS = s.s; app.prevY = s.y;
-  if (act && s.thrust > 0.05) {
-    app.thrustUsed += s.thrust * dt / 9;            // illustrative tank gauge
+  if (act) {
     body.getWorldQuaternion(tmpQ);
-    emDir.set(0, -1, 0).applyQuaternion(tmpQ);
-    app.emitAcc += s.thrust * 110 * dt * EMITTERS.length;
-    while (app.emitAcc >= 1) {
-      app.emitAcc -= 1;
-      tmpV.copy(EMITTERS[Math.floor(Math.random() * EMITTERS.length)]);
-      body.localToWorld(tmpV);
-      vapor.emit(tmpV, emDir, 8 + Math.random() * 6, carVel, 0.9);
+    if (s.thrust > 0.05) {
+      app.thrustUsed += s.thrust * dt / 9;            // illustrative tank gauge
+      app.emitAcc += s.thrust * 90 * dt * PLUMES.length;
+      while (app.emitAcc >= 1) {
+        app.emitAcc -= 1;
+        const e = PLUMES[Math.floor(Math.random() * PLUMES.length)];
+        tmpV.copy(e.p); body.localToWorld(tmpV);
+        emDir.copy(e.d).applyQuaternion(tmpQ);
+        vapor.emit(tmpV, emDir, 9 + Math.random() * 7, carVel, 1.3, 2.5);
+      }
+    }
+    if (s.jets > 0.1) {                                // attitude jets while the car rolls or flips
+      app.jetAcc += s.jets * 60 * dt * JETS.length;
+      while (app.jetAcc >= 1) {
+        app.jetAcc -= 1;
+        const e = JETS[Math.floor(Math.random() * JETS.length)];
+        tmpV.copy(e.p); body.localToWorld(tmpV);
+        emDir.copy(e.d).applyQuaternion(tmpQ);
+        vapor.emit(tmpV, emDir, 5 + Math.random() * 4, carVel, 0.7, 1.5);
+      }
+    }
+    if (app.splash) {                                  // ground-level burst at touchdown
+      app.splash = false;
+      for (let k = 0; k < 90; k++) {
+        const a = Math.random() * Math.PI * 2, r = 0.8 + Math.random() * 1.6;
+        tmpV.set(Math.cos(a) * r, 0.15, -s.s + Math.sin(a) * r);
+        emDir.set(Math.cos(a), 0.08, Math.sin(a));
+        vapor.emit(tmpV, emDir, 5 + Math.random() * 5, carVel.set(0, 0, 0), 1.2, 1.2);
+      }
     }
   }
   vapor.update(dt);
@@ -346,6 +384,6 @@ function frame(ts) {
     for (const c of controllers) c.userData.ray.visible = false;
   }
 
-  renderer.render(scene, camera);
+  renderer.render(scene, dbgCam || camera);
 }
 renderer.setAnimationLoop(frame);

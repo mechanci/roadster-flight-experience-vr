@@ -1,7 +1,14 @@
 # Flight Test: a VR ride-along (Meta Quest 3, WebXR)
 
 A seated WebXR experience: sit in the driver's seat of a concept Roadster-style cabin and take one of two thruster-assisted
-flights (**A: ramp drop**, **B: car hop**), then see what everyday use would require. It is about the *feel* and the
+flights, then see what everyday use would require.
+
+* **A, Curved ramp:** drive up a half-circle ramp held on by suction fans, stop upside-down at the top, get released, roll
+  upright on attitude jets and be caught by the main thrusters.
+* **B, Car hop:** thrusters launch the car over a row of vehicles (Cybercab, Cybertruck, Model Y, Model 3, Semi), with a flip
+  at the top and thruster braking on the way down.
+
+Both are modelled on press descriptions of the October 2026 unveil, not on frame-by-frame measurements of the video. It is about the *feel* and the
 question "is this ready for daily use?", not a measured reconstruction.
 
 Unofficial fan concept. Not affiliated with Tesla or SpaceX. The cabin is invented (the real interior has not been shown),
@@ -35,13 +42,14 @@ Quest Browser tab.
 
 * Point at the panel with either controller and pull the trigger.
 * **Squeeze a grip button during a ride to stop immediately.**
-* Comfort modes: *Gentle* (least rotation, strongest tunnel vision, default), *Standard*, *Intense* (full flip on the hop).
+* Comfort modes: *Gentle* (slower drop, least rotation, strongest tunnel vision, default), *Standard*, *As shown* (full flip on the hop).
 
 ## How it works
 
 | File | Role |
 | --- | --- |
-| `js/rides.js` | Ride kinematics (pure maths): drive, thrust launch, free-fall, thrust braking, touchdown. Baked to a table and sampled by time. Also felt g, rotation rate and thrust level. |
+| `js/rides.js` | Ride kinematics (pure maths): drive, half-circle ramp, suction hold, thrust launch, free-fall, roll, thrust braking, touchdown. Baked to a table and sampled by time. Also felt g, rotation rate, thrust and suction level. |
+| `js/vehicles.js` | The row of vehicles in the hop (low-poly silhouettes and roof heights). The row is placed under the flight path so each one is cleared. |
 | `js/world.js` | Dusk test site, runway, light poles, ramp (ride A), row of parked cars (ride B), exit sign. |
 | `js/cabin.js` | Invented concept cabin, yoke, centre screen, windscreen HUD and menu panel. |
 | `js/comfort.js` | Dynamic vignette (tunnel vision), head sink under load, shake. |
@@ -62,8 +70,8 @@ Check the headline numbers without a headset:
 node tools/check-rides.mjs
 ```
 
-Edit constants at the top of `js/rides.js` (`V_CRUISE`, `F_LAUNCH`, `F_BRAKE`, `S_LAUNCH`, `RAMP`, and `MODES`) and re-run.
-Debug URL parameters: `?ride=drop|hop&mode=gentle|standard|intense&autostart=1&seek=<seconds>` (`seek` freezes the ride at a time).
+Edit constants at the top of `js/rides.js` (`V_HOP`, `V_LOOP`, `F_LAUNCH`, `F_BRAKE`, `T_LAUNCH`, `T_TOP`, `LOOP`, and `MODES`) and re-run.
+Debug URL parameters: `?ride=drop|hop&mode=gentle|standard|intense&autostart=1&seek=<seconds>` (`seek` freezes the ride at a time). `?cam=x,y,z&look=x,y,z` renders from a fixed outside camera, handy for checking models.
 
 ## Performance budget (Quest 3)
 
