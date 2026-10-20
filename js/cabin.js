@@ -167,7 +167,8 @@ export function createCabin() {
   const hud = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.2325), new THREE.MeshBasicMaterial({
     map: hudTex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, toneMapped: false, fog: false,
   }));
-  hud.position.set(EYE.x, 0.95, -0.75);
+  hud.position.set(EYE.x - 0.09, 0.95, -0.75);
+  hud.scale.set(0.8, 0.8, 1);
   hud.renderOrder = 5;
   group.add(hud);
 
