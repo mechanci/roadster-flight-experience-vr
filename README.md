@@ -1,0 +1,76 @@
+# Flight Test: a VR ride-along (Meta Quest 3, WebXR)
+
+A seated WebXR experience: sit in the driver's seat of a concept Roadster-style cabin and take one of two thruster-assisted
+flights (**A: ramp drop**, **B: car hop**), then see what everyday use would require. It is about the *feel* and the
+question "is this ready for daily use?", not a measured reconstruction.
+
+Unofficial fan concept. Not affiliated with Tesla or SpaceX. The cabin is invented (the real interior has not been shown),
+and figures such as the 3.3 g peak come from press coverage of the October 2026 unveil and are unverified.
+
+## Run it
+
+It is a static site with no build step (three.js is vendored in `vendor/three`).
+
+```bash
+python3 -m http.server 8000        # then open http://localhost:8000 on your computer
+```
+
+* **Desktop preview:** click *Desktop preview*, drag to look, click the panel buttons, `Enter` starts, `Esc` returns to the menu.
+* **Quest 3:** WebXR needs HTTPS, so test on the device via GitHub Pages (below), or tunnel your local server
+  (`npx localtunnel --port 8000` or `cloudflared tunnel --url http://localhost:8000`), then open the link in the Meta Quest
+  Browser and tap *Enter VR*.
+
+### Deploy on GitHub Pages
+
+1. Create a repo and push this folder to it (`main` branch).
+2. Settings > Pages > Build and deployment > Source: *Deploy from a branch*, branch `main`, folder `/ (root)`.
+3. Open `https://<user>.github.io/<repo>/` in the Quest Browser. The `.nojekyll` file stops Pages from processing the files.
+
+### Remote debugging on Quest
+
+Enable developer mode on the headset, connect over USB, then open `chrome://inspect` in desktop Chrome and inspect the
+Quest Browser tab.
+
+## Controls (in VR)
+
+* Point at the panel with either controller and pull the trigger.
+* **Squeeze a grip button during a ride to stop immediately.**
+* Comfort modes: *Gentle* (least rotation, strongest tunnel vision, default), *Standard*, *Intense* (full flip on the hop).
+
+## How it works
+
+| File | Role |
+| --- | --- |
+| `js/rides.js` | Ride kinematics (pure maths): drive, thrust launch, free-fall, thrust braking, touchdown. Baked to a table and sampled by time. Also felt g, rotation rate and thrust level. |
+| `js/world.js` | Dusk test site, runway, light poles, ramp (ride A), row of parked cars (ride B), exit sign. |
+| `js/cabin.js` | Invented concept cabin, yoke, centre screen, windscreen HUD and menu panel. |
+| `js/comfort.js` | Dynamic vignette (tunnel vision), head sink under load, shake. |
+| `js/audio.js` | Synthesised thruster, wind, drive whine, beeps. Muffles in free-fall. |
+| `js/vapor.js` | Cold-gas plume particles. |
+| `js/ui.js` | Canvas-drawn menu, result card, HUD and screen. |
+| `js/main.js` | Renderer, XR session, controllers, haptics, state machine. |
+
+The rig is `car > body > rig > camera`. The cabin is part of `body`, so it stays fixed relative to your head and gives your
+brain a stable reference while the world moves; that is the main comfort technique. The car pivots about its centre of mass,
+so flips swing the eye point realistically. Reference space is `local`, so your seated head position is the driver's eye point.
+
+## Tuning
+
+Check the headline numbers without a headset:
+
+```bash
+node tools/check-rides.mjs
+```
+
+Edit constants at the top of `js/rides.js` (`V_CRUISE`, `F_LAUNCH`, `F_BRAKE`, `S_LAUNCH`, `RAMP`, and `MODES`) and re-run.
+Debug URL parameters: `?ride=drop|hop&mode=gentle|standard|intense&autostart=1&seek=<seconds>` (`seek` freezes the ride at a time).
+
+## Performance budget (Quest 3)
+
+Roughly 150 draw calls, no real-time shadows, one canvas-texture update batch at about 15 Hz, particles in one draw call,
+fixed foveation 0.5, target 90 Hz. If frames drop on device, lower `renderer.setPixelRatio`, shrink the hills/town, or cut
+the vapor pool in `js/vapor.js`.
+
+## Credits
+
+three.js (MIT) is bundled in `vendor/three`; see `vendor/three/LICENSE`.
