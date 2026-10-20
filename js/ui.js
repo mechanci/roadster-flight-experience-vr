@@ -101,10 +101,10 @@ export class UI {
       g.textAlign = 'left';
       g.fillStyle = '#8f9aa5'; g.font = 'bold 22px sans-serif'; g.fillText('WHAT DAILY USE WOULD NEED (AS REPORTED)', 500, 188);
       const bullets = [
-        'Flights last seconds; the air tank (~600 L reported) must be recharged.',
+        'Flights last seconds and drain the tank: about half of a 250 kg gas load in one drop (reconstruction estimate).',
         'No word yet on how thruster maneuvers would be approved for public roads.',
         'Only the top trims carry thrusters; the base car has none.',
-        'Wall ride relies on fan suction (about 2 g claimed); the drop is about 3 g and loud.',
+        'The ramp needs a suction fan (up to 43 kN in the reconstruction), and the landing is about 3 g and loud.',
       ];
       g.font = '26px sans-serif';
       let y = 238;
@@ -116,7 +116,7 @@ export class UI {
       button('replay', 60, 520, 330, 90, 'Replay', null, false, true);
       button('menu', 410, 520, 330, 90, 'Menu', null, false, false);
       g.fillStyle = '#7d8893'; g.font = '20px sans-serif'; g.textAlign = 'left';
-      g.fillText('Simulated feel only: VR cannot produce real g-force. Sources: press coverage of the unveil.', 60, 670);
+      g.fillText('Simulated feel only: VR cannot produce real g-force. Sources: press coverage and a public reconstruction.', 60, 670);
     }
     this.cabin.panelTex.needsUpdate = true;
   }

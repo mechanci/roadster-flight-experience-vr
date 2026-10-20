@@ -4,44 +4,48 @@
 // (world z = -s) and `y` is the height of the car origin above the ground. Each ride is
 // simulated once at start-up, baked into a table and sampled by time.
 //
-// Ride A follows press descriptions of the unveil: the car drives up a half-circle ramp held on by
-// suction fans, stops upside-down at the top, is released, rolls upright on attitude jets and is
-// caught by the main thrusters. Ride B launches over a row of vehicles with a flip at the top.
-// Source figures (press coverage, not verified at source): ~3.3 g on the braking telemetry, >80 kN
-// thrust, suction ~2 g (Tesla claim). Heights, speeds and timings are invented and tuned for comfort.
+// Ride A follows the public reconstruction at bartblockmans.com/simulations/tesla-roadster-ramp: a
+// thruster-assisted standing start, a run-up, a ramp curving through 170 degrees onto an overhead deck
+// (the car held on by an underfloor suction fan), release from the lip upside-down, a barrel roll to
+// upright and a thruster-cushioned landing on four wheels, then a stop. Reported there: lip at 14.8 s,
+// about a second to roll upright, touchdown about 3 s after the lip at 16.2 m/s forward and 2.8 m/s down.
+// Ride B launches over a row of vehicles with a flip at the top (press descriptions).
+// Other figures (press coverage, not verified at source): ~3.3 g on the braking telemetry, >80 kN
+// thrust. Heights, speeds and timings that are not in those sources are invented and tuned for comfort.
 
 export const G = 9.80665;
 
 export const PHASES = ['STANDBY', 'ACCELERATING', 'CRUISE', 'THRUSTERS: LAUNCH', 'AIRBORNE',
-  'THRUSTERS: BRAKE', 'TOUCHDOWN', 'ROLLOUT', 'PARKED', 'SUCTION: CLIMBING', 'SUCTION: INVERTED HOLD'];
+  'THRUSTERS: BRAKE', 'TOUCHDOWN', 'ROLLOUT', 'PARKED', 'SUCTION: ON THE RAMP', 'SUCTION: INVERTED'];
 const P = { WAIT: 0, ACCEL: 1, CRUISE: 2, LAUNCH: 3, AIR: 4, BRAKE: 5, SETTLE: 6, ROLL: 7, HOLD: 8, RAMP: 9, TOP: 10 };
 
 export const MODES = {
-  gentle:   { label: 'Gentle',   pitchBump: 8,  roll: 0,  flip: false, vignette: 1.0,  shake: 0.45, gScale: 0.6 },
-  standard: { label: 'Standard', pitchBump: 28, roll: 4,  flip: false, vignette: 0.8,  shake: 0.8,  gScale: 0.8 },
-  intense:  { label: 'As shown', pitchBump: 0,  roll: 10, flip: true,  vignette: 0.55, shake: 1.0,  gScale: 1.0 },
+  // vIn: speed entering the ramp (m/s); dropPitch: nose-down dip during the roll (deg); rollFrac: share of the
+  // flight the barrel roll is spread over (smaller = faster roll)
+  gentle:   { label: 'Gentle',   pitchBump: 8,  roll: 0,  flip: false, vignette: 1.0,  shake: 0.45, gScale: 0.6, vIn: 11, dropPitch: 4, rollFrac: 0.9 },
+  standard: { label: 'Standard', pitchBump: 28, roll: 4,  flip: false, vignette: 0.8,  shake: 0.8,  gScale: 0.8, vIn: 14, dropPitch: 12, rollFrac: 0.7 },
+  intense:  { label: 'As shown', pitchBump: 0,  roll: 10, flip: true,  vignette: 0.55, shake: 1.0,  gScale: 1.0, vIn: 17, dropPitch: 25, rollFrac: 0.5 },
 };
 
 export const RIDES = {
-  drop: { label: 'A  Curved ramp', blurb: 'Climb it upside-down, then drop.' },
+  drop: { label: 'A  Curved ramp', blurb: 'Up the ramp, inverted, then released.' },
   hop:  { label: 'B  Car hop',     blurb: 'Jump a row of Teslas and flip.' },
 };
 
 const DT = 1 / 240;
 const T_WAIT = 4;          // countdown before moving
-const T_ACC = 6;
+const T_ACC = 1.5;         // thruster-assisted standing start (rear nozzles)
 const T_ROLL = 5;
 const F_LAUNCH = 3.1;      // felt g at launch
 const F_BRAKE = 3.3;       // felt g braking, the figure shown on Tesla's telemetry
+const V_TOUCH = 2.8;       // vertical speed at touchdown (m/s), as in the reconstruction; the suspension absorbs it
 const T_LAUNCH = 0.76;
 const S_LAUNCH = 62;       // hop: distance at which launch thrust starts
 const V_HOP = 14;          // m/s
-const V_LOOP = 9.5;        // m/s on approach to the ramp: slow, so the wall ride stays comfortable
-const T_TOP = 2.6;         // seconds held upside-down
-const V_BACK = 4;          // peak speed of the drive-away after the drop
 
-// Half-circle ramp, radius R, with a curvature ramp-in of length LR so the car doesn't snap into the turn.
-export const LOOP = { R: 9, LR: 6, s0: 48, width: 7 };
+// Ramp: constant-radius turn through 170 degrees with eased curvature at both ends, then a straight overhead
+// deck of length `deck`. The car is on the inside of the curve, so it ends up inverted under the deck.
+export const LOOP = { R: 12, LR: 10, LR2: 8, turn: 170 * Math.PI / 180, deck: 14, s0: 70, width: 7 };
 
 const smooth = x => { x = Math.min(1, Math.max(0, x)); return x * x * (3 - 2 * x); };
 
@@ -49,19 +53,25 @@ let _prof = null;
 /** Centre line of the ramp surface: arrays of s (forward), y (height) and theta (pitch) every `du` metres. */
 export function loopProfile() {
   if (_prof) return _prof;
-  const { R, LR } = LOOP;
-  const L = Math.PI * R + LR / 2;      // total turning = pi
-  const du = 0.05, n = Math.ceil(L / du) + 1;
-  const s = new Float32Array(n), y = new Float32Array(n), th = new Float32Array(n);
+  const { R, LR, LR2, turn, deck } = LOOP;
+  const du = 0.05, k0 = 1 / R;
+  const kappa = (u, La) => k0 * smooth(u / LR) * (1 - smooth((u - (La - LR2)) / LR2));
+  const turned = La => { let a = 0; for (let u = 0; u < La; u += du) a += kappa(u, La) * du; return a; };
+  let lo = turn * R, hi = turn * R + 40;           // find the arc length that turns exactly `turn`
+  for (let i = 0; i < 40; i++) { const m = (lo + hi) / 2; if (turned(m) < turn) lo = m; else hi = m; }
+  const La = (lo + hi) / 2, L = La + deck;
+  const n = Math.ceil(L / du) + 1;
+  const s = new Float32Array(n), y = new Float32Array(n), th = new Float32Array(n), kp = new Float32Array(n);
   let a = 0, x = 0, h = 0;
   for (let i = 0; i < n; i++) {
     const u = i * du;
     s[i] = x; y[i] = h; th[i] = a;
-    a += (1 / R) * smooth(u / LR) * du;
+    kp[i] = u < La ? kappa(u, La) : 0;
+    a += kp[i] * du;
     x += Math.cos(a) * du;
     h += Math.sin(a) * du;
   }
-  _prof = { du, n, s, y, th, L, H: y[n - 1], S: s[n - 1] };
+  _prof = { du, n, s, y, th, kp, L, La, H: y[n - 1], S: s[n - 1], thetaEnd: th[n - 1] };
   return _prof;
 }
 const at = (arr, du, u) => {
@@ -78,7 +88,8 @@ export function buildRide(kind, modeKey) {
   let t = 0, s = 0, y = 0, vs = 0, vy = 0, phase = P.WAIT, tPhase = 0, u = 0;
   let bumpT = -1, airborne = false, pitchBase = 0;
   const ev = {};
-  const V = kind === 'drop' ? V_LOOP : V_HOP;
+  const V = kind === 'drop' ? mode.vIn : V_HOP;
+  let vs0 = 0, vLip = 0;
 
   const setPhase = (p, key) => { phase = p; tPhase = t; if (key) ev[key] = t; };
 
@@ -92,6 +103,7 @@ export function buildRide(kind, modeKey) {
       case P.ACCEL: {
         const k = (t - tPhase) / T_ACC;
         ax = (V * Math.PI / (2 * T_ACC)) * Math.sin(Math.PI * Math.min(1, k));
+        thrust = smooth(Math.min(k / 0.12, (1 - k) / 0.12, 1));   // rear nozzles do the work of the standing start
         vs += ax * DT;
         if (k >= 1) { vs = V; setPhase(P.CRUISE); }
         break;
@@ -101,28 +113,31 @@ export function buildRide(kind, modeKey) {
         if (kind === 'drop' && s >= LOOP.s0) { u = 0; setPhase(P.RAMP, 'ramp'); continue; }
         break;
       case P.RAMP: {
-        // constant deceleration that stops the car exactly at the top of the half circle
-        const v = V * Math.sqrt(Math.max(0, 1 - u / prof.L));
+        // speed eases from the entry speed to a lower speed at the lip (scripted: the car also has motor power here)
+        vLip = V * 0.82;
+        const v = V + (vLip - V) * smooth(u / prof.L);
         const theta = at(prof.th, prof.du, u);
-        const kappa = (1 / LOOP.R) * smooth(u / LOOP.LR);
         s = LOOP.s0 + at(prof.s, prof.du, u);
         y = at(prof.y, prof.du, u);
         pitchBase = theta;
         vs = v;
-        f = v * v * kappa / G + Math.cos(theta);     // specific force along the car's up axis
+        f = v * v * at(prof.kp, prof.du, u) / G + Math.cos(theta);     // specific force along the car's up axis
         fan = 1;
         custom = true;
         u += v * DT;
-        if (prof.L - u < 0.03) { s = LOOP.s0 + prof.S; y = prof.H; pitchBase = Math.PI; vs = 0; setPhase(P.TOP, 'top'); }
+        if (u >= prof.L - 0.01) {
+          // released from the lip. From here the car pivots about its centre of mass (0.5 m above the origin
+          // when upright), so the origin is re-based to keep the car where it was.
+          const th = prof.thetaEnd;
+          airborne = true; fan = 0;
+          vy = vLip * Math.sin(th); vs = vLip * Math.cos(th);
+          y = prof.H - 0.5 + 0.5 * Math.cos(th);
+          s = LOOP.s0 + prof.S - 0.5 * Math.sin(th);
+          setPhase(P.AIR, 'edge');
+          continue;
+        }
         break;
       }
-      case P.TOP:
-        f = -1; fan = 1; custom = true; vs = 0;
-        s = LOOP.s0 + prof.S; y = prof.H; pitchBase = Math.PI;
-        // From here the car rotates about its centre of mass (0.5 m above the origin when upright), so the
-        // origin height is re-based: the centre of mass sits 0.5 m below the inverted track.
-        if (t - tPhase >= T_TOP) { airborne = true; vy = 0; fan = 0; y = prof.H - 1.0; setPhase(P.AIR, 'edge'); continue; }
-        break;
       case P.LAUNCH: {
         const k = (t - tPhase) / T_LAUNCH;
         const env = smooth(Math.min(k / 0.2, (1 - k) / 0.2, 1));
@@ -137,32 +152,26 @@ export function buildRide(kind, modeKey) {
       case P.AIR:
         ay = -G * (kind === 'drop' ? mode.gScale : 1); f = 0;   // gentler mode: slower drop
         // Start braking so that a constant (F_BRAKE-1) g net deceleration just stops the fall.
-        if (vy < 0 && vy * vy >= 2 * (F_BRAKE - 1) * G * Math.max(y, 0.01) * 0.72) { setPhase(P.BRAKE, 'brake'); continue; }
+        if (vy < 0 && vy * vy >= V_TOUCH * V_TOUCH + 2 * (F_BRAKE - 1) * G * Math.max(y, 0.01) * 0.85) { setPhase(P.BRAKE, 'brake'); continue; }
         break;
       case P.BRAKE: {
         const ramp = smooth((t - tPhase) / 0.08);
         const thrustUp = F_BRAKE * G * ramp;
         ay = thrustUp - G; f = thrustUp / G; thrust = ramp;
-        if (vy >= -0.4) setPhase(P.SETTLE);
+        if (vy >= -V_TOUCH) setPhase(P.SETTLE);
         break;
       }
       case P.SETTLE:
-        ay = Math.max(-G, Math.min(G, (-0.4 - vy) / 0.15));
+        ay = Math.max(-G, Math.min(G, (-V_TOUCH - vy) / 0.15));
         f = (ay + G) / G; thrust = 0.3;
         break;
       case P.ROLL: {
-        if (kind === 'drop') {
-          // drive off backwards, away from the ramp, then stop
-          const k = (t - tPhase) / T_ROLL;
-          vs = -V_BACK * Math.sin(Math.PI * Math.min(1, k));
-          ax = -V_BACK * (Math.PI / T_ROLL) * Math.cos(Math.PI * Math.min(1, k));
-          if (k >= 1) { vs = 0; setPhase(P.HOLD); }
-        } else {
-          const k = (t - tPhase) / T_ROLL;
-          ax = -(V * Math.PI / (2 * T_ROLL)) * Math.sin(Math.PI * Math.min(1, k));
-          vs += ax * DT;
-          if (k >= 1) { vs = 0; setPhase(P.HOLD); }
-        }
+        // roll out to a stop: speed follows half a cosine from its touchdown value to zero
+        if (vs0 === 0) vs0 = vs;
+        const k = Math.min(1, (t - tPhase) / T_ROLL);
+        vs = vs0 * 0.5 * (1 + Math.cos(Math.PI * k));
+        ax = -vs0 * 0.5 * (Math.PI / T_ROLL) * Math.sin(Math.PI * k);
+        if (k >= 1) { vs = 0; setPhase(P.HOLD); }
         break;
       }
       case P.HOLD:
@@ -185,7 +194,7 @@ export function buildRide(kind, modeKey) {
 
     if (bumpT >= 0 && t - bumpT < 0.5) f += 0.3 * Math.exp(-(t - bumpT) / 0.12);
 
-    rows.push([s, y, pitchBase, 0, Math.abs(vs), f, ax / G, thrust, phase === 99 ? P.HOLD : phase, fan, 0]);
+    rows.push([s, y, pitchBase, 0, Math.abs(vs), f, ax / G, thrust, phase === 99 ? P.HOLD : (phase === P.RAMP && pitchBase > 1.75 ? P.TOP : phase), fan, 0]);
     t += DT;
   }
   if (ev.end === undefined) ev.end = t;
@@ -205,8 +214,11 @@ export function buildRide(kind, modeKey) {
       else rows[i][2] += mode.pitchBump * deg * Math.sin(2 * Math.PI * k);
       rows[i][3] += mode.roll * deg * Math.sin(2 * Math.PI * k);
     } else {
-      // released upside-down: barrel roll upright on the attitude jets, finishing as the main thrusters catch it
-      rows[i][3] = Math.PI * smooth01(k / 0.9);
+      // released inverted from the lip: barrel roll upright on the attitude jets while the nose settles level,
+      // finishing as the underfloor thrusters catch the car
+      const te = loopProfile().thetaEnd;
+      rows[i][2] = te + (Math.PI - te) * smooth01(k / 0.8) + mode.dropPitch * deg * Math.sin(Math.PI * k);
+      rows[i][3] = Math.PI * smooth01(k / mode.rollFrac);
     }
   }
 

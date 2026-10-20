@@ -63,7 +63,7 @@ export class Comfort {
 
     // head sinks into the seat under load, rises when weightless
     const targetY = active ? -0.045 * clamp((s.f - 1) / 2.3) + 0.03 * (s.f < 0.2 ? 1 : 0) : 0;
-    const targetZ = active ? 0.05 * clamp((s.f - 1) / 2.3) : 0;
+    const targetZ = active ? 0.05 * clamp((s.f - 1) / 2.3) + 0.06 * clamp(s.gFwd / 1.4, -1, 1) : 0;   // thrust pushes the head back into the seat, braking throws it forward
     this.push.y += (targetY - this.push.y) * (1 - Math.exp(-10 * dt));
     this.push.z += (targetZ - this.push.z) * (1 - Math.exp(-10 * dt));
 

@@ -240,6 +240,8 @@ const em = (p, d) => ({ p: new THREE.Vector3(...p), d: new THREE.Vector3(...d).n
 // main thrusters point down out of the underbody; two vents sit by the doors so plumes show at the cabin's sides
 const PLUMES = [em([-0.6, 0.15, 1.4], [0, -1, 0]), em([0.6, 0.15, 1.4], [0, -1, 0]), em([-0.6, 0.15, -1.4], [0, -1, 0]),
   em([0.6, 0.15, -1.4], [0, -1, 0]), em([-1.0, 0.3, 0.2], [-0.55, -0.85, 0]), em([1.0, 0.3, 0.2], [0.55, -0.85, 0])];
+// rear nozzles for the standing start: they fire backwards
+const REAR = [em([-0.5, 0.35, 2.0], [0, 0.04, 1]), em([0.5, 0.35, 2.0], [0, 0.04, 1]), em([-0.2, 0.35, 2.0], [0, 0.04, 1]), em([0.2, 0.35, 2.0], [0, 0.04, 1])];
 const JETS = [em([-0.95, 0.5, 1.5], [-0.8, 0.6, 0]), em([0.95, 0.5, 1.5], [0.8, -0.6, 0]),
   em([-0.95, 0.5, -1.5], [-0.8, -0.6, 0]), em([0.95, 0.5, -1.5], [0.8, 0.6, 0])];
 const IDLE = { s: 0, y: 0, pitch: 0, roll: 0, speed: 0, f: 1, gFwd: 0, thrust: 0, phase: 0, rate: 0 };
@@ -318,10 +320,11 @@ function frame(ts) {
     body.getWorldQuaternion(tmpQ);
     if (s.thrust > 0.05) {
       app.thrustUsed += s.thrust * dt / 9;            // illustrative tank gauge
-      app.emitAcc += s.thrust * 90 * dt * PLUMES.length;
+      const set = s.phase === 1 ? REAR : PLUMES;      // standing start: rear nozzles; otherwise the underbody ones
+      app.emitAcc += s.thrust * 90 * dt * set.length;
       while (app.emitAcc >= 1) {
         app.emitAcc -= 1;
-        const e = PLUMES[Math.floor(Math.random() * PLUMES.length)];
+        const e = set[Math.floor(Math.random() * set.length)];
         tmpV.copy(e.p); body.localToWorld(tmpV);
         emDir.copy(e.d).applyQuaternion(tmpQ);
         vapor.emit(tmpV, emDir, 9 + Math.random() * 7, carVel, 1.3, 2.5);

@@ -3,12 +3,15 @@
 A seated WebXR experience: sit in the driver's seat of a concept Roadster-style cabin and take one of two thruster-assisted
 flights, then see what everyday use would require.
 
-* **A, Curved ramp:** drive up a half-circle ramp held on by suction fans, stop upside-down at the top, get released, roll
-  upright on attitude jets and be caught by the main thrusters.
+* **A, Curved ramp:** a thruster-assisted standing start, a run-up, a ramp curving through 170 degrees onto an overhead deck
+  (held on by an underfloor suction fan), release from the lip upside-down, a barrel roll to upright and a thruster-cushioned
+  landing on four wheels.
 * **B, Car hop:** thrusters launch the car over a row of vehicles (Cybercab, Cybertruck, Model Y, Model 3, Semi), with a flip
   at the top and thruster braking on the way down.
 
-Both are modelled on press descriptions of the October 2026 unveil, not on frame-by-frame measurements of the video. It is about the *feel* and the
+Ride A follows the public reconstruction at bartblockmans.com/simulations/tesla-roadster-ramp (170 degree curve, release inverted
+from the lip, about 3 s of flight, 2.8 m/s vertical touchdown); the rest is based on press descriptions of the October 2026 unveil.
+Neither is a measurement of Tesla's actual car. It is about the *feel* and the
 question "is this ready for daily use?", not a measured reconstruction.
 
 Unofficial fan concept. Not affiliated with Tesla or SpaceX. The cabin is invented (the real interior has not been shown),
